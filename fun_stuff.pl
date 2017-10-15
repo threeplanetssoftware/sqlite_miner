@@ -15,7 +15,6 @@
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # To do list
-# - Identify the file extension to use
 # - Flag potentially malicious files to block export
 # - Specify file types to export
 # - Support magic numbers that aren't at the start of the file
@@ -29,15 +28,15 @@ $FUN_STUFF_REGEX      = 3;
 %fun_stuff;
 
 # Compressed formats that we may want to decompress
-add_fun_thing_to_hash('GZIP',     1, 'gz',   '1f8b%');
+add_fun_thing_to_hash('7ZIP',     0, '7z',   '377abcaf271c%');
 add_fun_thing_to_hash('BZIP',     1, 'bz2',  '425a68%');
+add_fun_thing_to_hash('GZIP',     1, 'gz',   '1f8b%');
+add_fun_thing_to_hash('LZ4',      1, 'lz4',  '04224d18%');
+add_fun_thing_to_hash('RAR',      0, 'rar',  '526172211a0700%');
+add_fun_thing_to_hash('RAR_5.0',  0, 'rar',  '526172211a070100%');
 add_fun_thing_to_hash('ZIP',      1, 'zip',  '504b0304%');
 add_fun_thing_to_hash('ZIP_EMPTY',1, 'zip',  '504b0506%');
 add_fun_thing_to_hash('ZIP_SPAN', 1, 'zip',  '504b0708%');
-add_fun_thing_to_hash('RAR',      1, 'rar',  '526172211a0700%');
-add_fun_thing_to_hash('RAR_5.0',  1, 'rar',  '526172211a070100%');
-add_fun_thing_to_hash('7ZIP',     1, '7z',   '377abcaf271c%');
-add_fun_thing_to_hash('LZ4',      1, 'lz4',  '04224d18%');
 add_fun_thing_to_hash('ZLIB_LOW', 1, 'zlib', '7801%');
 add_fun_thing_to_hash('ZLIB',     1, 'zlib', '789c%');
 add_fun_thing_to_hash('ZLIB_MAX', 1, 'zlib', '78da%');
