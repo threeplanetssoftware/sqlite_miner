@@ -8,6 +8,7 @@
 *.bs
 *.swp
 *.sqlite
+output/*
 
 # Devel::Cover
 cover_db/
