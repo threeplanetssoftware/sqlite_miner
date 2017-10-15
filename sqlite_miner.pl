@@ -19,7 +19,7 @@ use DBI;
 use File::Copy;
 use File::Spec::Functions;
 use Getopt::Long qw(:config no_auto_abbrev);
-use IO::Uncompress::Gunzip qw(gunzip $GunzipError);
+use IO::Uncompress::AnyUncompress qw(anyuncompress $AnyUncompressError);
 use POSIX qw(strftime);
 
 # Set up initial variables
@@ -28,6 +28,7 @@ my $original_file = 0;
 my $help = 0;
 my $decompress = 0;
 my $export_files = 0;
+my $output_file = 0;
 
 # Set up file system variables
 my $export_directory;
@@ -75,6 +76,11 @@ my $output_db_file = File::Spec->catfile($run_folder,$output_db_file);
 copy($original_file, $output_db_file);
 print "Copying original file to preserve it, working from $output_db_file\n" if $verbose;
 
+# Create the output file and spit the head to it
+$output_file = File::Spec->catfile($run_folder, "results.csv");
+open(RESULT_OUTPUT, ">$output_file") or die "Can't open result file to write\n";
+print RESULT_OUTPUT "\"Database\",\"Table\",\"Column\",\"Primary Key Column\",\"Index\",\"File Type\",\"Export Filename\",\"Compression\"\n";
+
 # Make a folder to export files to, if desired
 if($export_files) {
   $export_directory = File::Spec->catdir($run_folder, "exports");
@@ -116,7 +122,7 @@ foreach $table (sort(keys(%table_information))) {
 
 # Clean up nicely
 $dbh->disconnect();
-
+close(RESULT_OUTPUT);
 
 ####################
 # Functions follow #
@@ -130,6 +136,13 @@ sub check_column_for_fun {
   my $table_name  = @_[1];
   my $column_name = @_[2];
   my @primary_keys = @_[3];
+
+        
+  # Get the real table name
+  (my $tmp_schema, my $tmp_table_name) = normalize_table_name($table_name);
+
+  # Remember if we decompressed anything to go back and check again for more goodies
+  my $decompressed_anything = 0;
 
   # Figure out our primary key
   $primary_key_column;
@@ -173,11 +186,11 @@ sub check_column_for_fun {
         print "(no primary key)\n";
       }
 
+      # Print out to the target CSV file
+      print RESULT_OUTPUT "\"$original_file_name\",\"$tmp_table_name\",\"$column_name\",\"$primary_key_column\",\"$tmp_primary_key\",\"$file_type\",";
+
       # Save out the blob if we're exporting files
       if($export_files) {
-        
-        # Get the real table name
-        (my $tmp_schema, my $tmp_table_name) = normalize_table_name($table_name);
 
         # Build the export filename (TABLE_COLUMN_[PRIMARYKEYCOLUMN_PRIMARYKEY].blob.EXTENSION)
         my $tmp_export_file_name = $tmp_table_name."-".$column_name;
@@ -187,6 +200,8 @@ sub check_column_for_fun {
         $tmp_export_file_name .= ".blob.".$fun_stuff{$file_type}{'extension'};
         $tmp_export_file_path = File::Spec->catfile($export_directory, $tmp_export_file_name);
         $tmp_export_file_counter = 1;
+        
+        # Keep looping until we're sure we have a unique file path
         while(-e $tmp_export_file_path) {
           $tmp_export_file_counter += 1;
           $tmp_export_file_path = File::Spec->catfile($export_directory, $tmp_export_file_name."_".$tmp_export_file_counter);
@@ -198,11 +213,46 @@ sub check_column_for_fun {
         binmode(OUTPUT);
         print OUTPUT $tmp_data_blob;
         close(OUTPUT);
+        print RESULT_OUTPUT "\"$tmp_export_file_path\",";
+      } else {
+        print RESULT_OUTPUT ",";
+      }
+
+      # Update the database if we're decompressing values
+      if($decompress and $fun_stuff{$file_type}{'compression'}) {
+        $tmp_new_blob;
+
+        # Decompress the blob
+        anyuncompress(\$tmp_data_blob => \$tmp_new_blob);
+
+        # Build and execute our query to update the database
+        if(length($tmp_new_blob) > 0 and $tmp_primary_key) {
+          my $tmp_update_query = "UPDATE $table_name SET $column_name=? WHERE $primary_key_column=?";
+          my $tmp_update_query_handler = $local_dbh->prepare($tmp_update_query);
+          $tmp_update_query_handler->execute($tmp_new_blob, $tmp_primary_key);
+          print "\tUpdated $column_name in $table_name with decompressed data when $primary_key_column=$tmp_primary_key\n" if $verbose;
+          $decompressed_anything = 1;
+        } elsif(length($tmp_new_blob) > 0 and !$tmp_primary_key) {
+          my $tmp_update_query = "UPDATE $table_name SET $column_name=?";
+          my $tmp_update_query_handler = $local_dbh->prepare($tmp_update_query);
+          $tmp_update_query_handler->execute($tmp_new_blob);
+          print "\tUpdated $column_name in $table_name with decompressed data (no primary key)\n" if $verbose;
+          $decompressed_anything = 1;
+        } else {
+          print "\tNot updating $column_name in $table_name with decompressed data due to likely bad decompression\n";
+        }
+        print RESULT_OUTPUT "\"Decompressed\"\n";
+      } else {
+        print RESULT_OUTPUT "\n";
       }
     }
     
   }
 
+  # Kick off this same column again if we decompressed anything
+  if($decompressed_anything) {
+    check_column_for_fun($local_dbh, $table_name, $column_name, @primary_keys);
+  }
 }
 
 # Function normalizes a table name
