@@ -52,6 +52,7 @@ add_fun_thing_to_hash('JPEG_JFIF',0, 'jpg', 'ffd8ffe0____4a4649460001%');
 add_fun_thing_to_hash('JPEG_EXIF',0, 'jpg', 'ffd8ffe1____457869660000%');
 add_fun_thing_to_hash('GIF',      0, 'gif', '474946383_61%');
 add_fun_thing_to_hash('PNG',      0, 'png', '89504e470d0a1a0a%');
+add_fun_thing_to_hash('WEBP',     0, 'webp','52494646________57454250%');
 
 # Media
 add_fun_thing_to_hash('MP3',    0, 'mp3',  'fffb%');
@@ -59,6 +60,11 @@ add_fun_thing_to_hash('MP3_ID3',0, 'mp3',  '494433%');
 add_fun_thing_to_hash('OGG',    0, 'ogg',  '4f676753%');
 add_fun_thing_to_hash('WAV',    0, 'wav',  '52494646________57415645%');
 add_fun_thing_to_hash('FLAC',   0, 'flac', '664c6143%');
+
+# Documents
+add_fun_thing_to_hash('PDF',   0, 'pdf',  '25504446%');
+add_fun_thing_to_hash('RTF',   0, 'rtf',  '7b5c72746631%');
+add_fun_thing_to_hash('iNote', 0, 'note', '080012%');
 
 # Executables
 add_fun_thing_to_hash('DALVIK_EXECUTABLE', 0, 'dex', '6465780a30333500%');
