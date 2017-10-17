@@ -82,10 +82,10 @@ return 1;
 # A regex to find it
 # The file extension to be applied if exported
 sub add_fun_thing_to_hash {
-  $file_type          = @_[$FUN_STUFF_FILE_TYPE];
-  $file_is_compressed = @_[$FUN_STUFF_COMPRESSED];
-  $file_regex         = @_[$FUN_STUFF_REGEX];
-  $file_extension     = @_[$FUN_STUFF_EXTENSION];
+  my $file_type          = @_[$FUN_STUFF_FILE_TYPE];
+  my $file_is_compressed = @_[$FUN_STUFF_COMPRESSED];
+  my $file_regex         = @_[$FUN_STUFF_REGEX];
+  my $file_extension     = @_[$FUN_STUFF_EXTENSION];
 
   if(exists($fun_stuff{$file_type})) {
     print "Fun Stuff Hash Error: A file type called $file_type already exists, ignoring this\n";
@@ -93,11 +93,9 @@ sub add_fun_thing_to_hash {
     $fun_stuff{$file_type} = {'compression' => $file_is_compressed,
                               'regex'       => $file_regex,
                               'extension'   => $file_extension};
-    if($verbose) {
-      print "Fun Stuff: Adding $file_type\n";
-      print "\tCompressed: $file_is_compressed\n";
-      print "\tREGEX: $file_regex\n";
-      print "\tExtension: $file_extension\n";
-    }
+    print "Fun Stuff: Adding $file_type\n" if $verbose;
+    print "\tCompressed: $file_is_compressed\n" if $very_verbose;
+    print "\tREGEX: $file_regex\n" if $very_verbose;
+    print "\tExtension: $file_extension\n" if $very_verbose;
   }
 }
