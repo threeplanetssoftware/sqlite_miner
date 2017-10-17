@@ -93,7 +93,7 @@ sub add_fun_thing_to_hash {
     $fun_stuff{$file_type} = {'compression' => $file_is_compressed,
                               'regex'       => $file_regex,
                               'extension'   => $file_extension};
-    print "Fun Stuff: Adding $file_type\n" if $verbose;
+    print "Fun Stuff: Adding $file_type\n" if $very_verbose;
     print "\tCompressed: $file_is_compressed\n" if $very_verbose;
     print "\tREGEX: $file_regex\n" if $very_verbose;
     print "\tExtension: $file_extension\n" if $very_verbose;
