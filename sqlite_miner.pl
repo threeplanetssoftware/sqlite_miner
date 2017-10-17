@@ -22,34 +22,33 @@ use Getopt::Long qw(:config no_auto_abbrev);
 use IO::Uncompress::AnyUncompress qw(anyuncompress $AnyUncompressError);
 use POSIX qw(strftime);
 use Time::HiRes qw(time);
+use File::Find;
 
 # Set up initial variables
 my $start_time = time;
 our $verbose = 0;
 our $very_verbose = 0;
 my $original_file = 0;
+my $input_directory = 0;
 my $help = 0;
 my $decompress = 0;
 my $export_files = 0;
-my $output_file = 0;
+#my $output_file = 0;
 
 # Set up variables for what we mine
 my $total_identified_blobs = 0;
 my %mined_blobs;
+my $results_file = 0;
+$total_files = 0;
 
 # Set up file system variables
 my $export_directory;
 my $base_directory = File::Spec->rel2abs(File::Spec->curdir());
 my $output_directory = catdir($base_directory,'output');
 
-# Set other files to read in
-my $fun_stuff_file = "fun_stuff.pl";
-
-# Import our hash of Fun Stuff to look for
-require $fun_stuff_file;
-
 # Read in options
 GetOptions('file=s'       => \$original_file,
+           'dir=s'        => \$input_directory,
            'decompress'   => \$decompress,
            'export'       => \$export_files,
            'verbose'      => \$verbose,
@@ -62,109 +61,179 @@ $verbose = $verbose || $very_verbose;
 
 print_copyright();
 
+# Set other files to read in
+my $fun_stuff_file = "fun_stuff.pl";
+
+# Import our hash of Fun Stuff to look for
+require $fun_stuff_file;
+
 # Ensure we have a file to work on
-if($help || !$original_file) {
+if($help || (!$original_file && !$input_directory)) {
   print_usage();
   exit();
 }
 
-# Check to ensure the file actually exists
-if(! -f $original_file) {
-  die "File $original_file does not exist\n";
-}
+# See if we have a directory to work on
+if($input_directory) {
+  if(! -d $input_directory) {
+    die "Directory $input_directory does not exist\n";
+  }
 
-##########################
-# Preparation of Folders #
-##########################
+  # Tell the user what we're doing
+  print "Search Directory: $input_directory\n";
 
-# Create the output directory
-my $run_folder = create_run_output_directory($output_directory, $original_file);
+  $output_directory = create_run_output_directory($output_directory, $input_directory);
 
-# Make sure we don't mess up our original
-(my $original_file_volume, my $original_file_directory, my $original_file_name) = File::Spec->splitpath($original_file);
-$output_db_file = $original_file_name;
-$output_db_file =~ s/(\.[^.]*)/.investigated$1/;
-my $output_db_file = File::Spec->catfile($run_folder,$output_db_file);
-copy($original_file, $output_db_file);
-print "SQLite file: ".File::Spec->abs2rel($output_db_file)."\n" if $verbose;
+  $results_file = create_results_file($output_directory);
 
-# Create the output file and spit the head to it
-$output_file = File::Spec->catfile($run_folder, "results.csv");
-open(RESULT_OUTPUT, ">$output_file") or die "Can't open $output_file to write results\n";
-print RESULT_OUTPUT "\"Database\",\"Table\",\"Column\",\"Primary Key Column\",\"Index\",\"File Type\"";
-if($export_files) {
-  print RESULT_OUTPUT ",\"Export Filename\"";
-}
-if($decompress) {
-  print RESULT_OUTPUT ",\"Decompressed?\"";
-}
-print RESULT_OUTPUT "\n";
-
-# Make a folder to export files to, if desired
-if($export_files) {
-  $export_directory = File::Spec->catdir($run_folder, "exports");
-  mkdir $export_directory;
-  print "Export folder: '".File::Spec->abs2rel($export_directory)."'\n" if $verbose;
-}
-
-##################
-# Database Time! #
-##################
-
-# Set up database connection
-my $dsn = "DBI:SQLite:dbname=$output_db_file";
-my $dbh = DBI->connect($dsn) or die "Cannot open $output_db_file\n";
-
-print "Mining: ".File::Spec->abs2rel($output_db_file)."\n";
-
-print "\n" if $verbose;
-
-# Fetch the table information
-my %table_information = get_table_information($dbh);
-
-# Identify possibly interesting blob columns
-foreach $table (sort(keys(%table_information))) {
-  print "Investigating $table\n" if $verbose;
-
-  # Break this table out into schema and table name
-  (my $schema, my $table_name) = normalize_table_name($table);
-
-  # Figure out what the primary keys are for the table
-  @primary_key_columns = $dbh->primary_key('', $schema, $table_name);
-  
-  # Get a summary of each blob that may contain Fun Stuff
-  my %tmp_table = %{$table_information{$table}};
-  foreach $column (keys(%tmp_table)) {
-    if($table_information{$table}{$column} eq "BLOB") {
-      check_column_for_fun($dbh, $table, $column, @primary_key_columns);
-    }
+  # Pull out all potential SQLite files (based on file itself)
+  my @files_to_mine;
+  find(
+    sub {
+      if(! -d $_ && file_is_sqlite($_)) {
+        my $tmp_filepath = $File::Find::name;
+        print "Found SQLite: $tmp_filepath!\n" if $verbose;
+        push(@files_to_mine, $tmp_filepath);
+      }
+    },
+    $input_directory
+  );
+  print "\n" if $verbose;
+  foreach $tmp_file (sort(@files_to_mine)){
+    mine_file($output_directory, $tmp_file, $results_file);
   }
 }
 
-# Clean up nicely
-$dbh->disconnect();
-close(RESULT_OUTPUT);
+# See if we have a file to work on
+if($original_file) {
+  # Check to ensure the file actually exists
+  if(! -f $original_file) {
+    die "File $original_file does not exist\n";
+  }
+ 
+  # Do work, son
+  mine_file($output_directory, $original_file, $results_file);
+}
 
 # Finish up the timing
 my $end_time = time;
 my $run_time = sprintf("%.4f", $end_time - $start_time);
 
-# Tell the user what we did
-my $identify_stats = "$total_identified_blobs potential files identified";
-if($export_files) {
-  $identify_stats .= " and exported"
-}
-print "\n#######################################################\n";
-print "SQLite file mined, $identify_stats in $run_time seconds.\n";
-print "Result file: ".File::Spec->abs2rel($output_file)."\n";
+# Give the user some feedback
 print_final_results();
-print "#######################################################\n";
 
 exit;
 
 ####################
 # Functions follow #
 ####################
+
+# Function that identifies a SQLite file
+# Function expects a path
+# Function returns a boolean
+sub file_is_sqlite {
+  my $file_path = @_[0];
+  my $tmp_header;
+  my $to_return = 0;
+
+  # Open the file in binary mode
+  open(TMP_INPUT, "<$file_path");
+  binmode(TMP_INPUT);
+
+  # Read in the first 16 bytes
+  read TMP_INPUT, $tmp_header, 15;
+  if($tmp_header =~ /^SQLite format 3$/) {
+    $to_return = 1;
+  }
+  close(TMP_INPUT);
+  return $to_return;
+}
+
+# Function to create the result file
+# Function requires a path to the run folder and that's it
+sub create_results_file {
+  my $run_folder = @_[0];
+
+  # Create the output file and spit the head to it
+  my $output_file = File::Spec->catfile($run_folder, "results.csv");
+  open(RESULT_OUTPUT, ">$output_file") or die "Can't open $output_file to write results\n";
+  print RESULT_OUTPUT "\"Database\",\"Table\",\"Column\",\"Primary Key Column\",\"Index\",\"File Type\"";
+  if($export_files) {
+    print RESULT_OUTPUT ",\"Export Filename\"";
+  }
+  if($decompress) {
+    print RESULT_OUTPUT ",\"Decompressed?\"";
+  }
+  print RESULT_OUTPUT "\n";
+  return $output_file;
+}
+
+# Function to handle mining one file
+# Function expects the output directory and original filename
+sub mine_file {
+  my $output_directory = @_[0];
+  my $original_file    = @_[1];
+  my $output_file      = @_[2];
+
+  $total_files += 1;
+
+  # Create the output directory
+  my $run_folder = create_run_output_directory($output_directory, $original_file);
+
+  if(!$output_file) {
+    $output_file = create_results_file($run_folder);
+  }
+
+  # Make sure we don't mess up our original
+  (my $original_file_volume, my $original_file_directory, my $original_file_name) = File::Spec->splitpath($original_file);
+  $output_db_file = $original_file_name;
+  $output_db_file =~ s/(\.[^.]*)/.investigated$1/;
+  my $output_db_file = File::Spec->catfile($run_folder,$output_db_file);
+  copy($original_file, $output_db_file) or die "Can't copy $original_file to $output_db_file - $!\n";
+  print "SQLite file: ".File::Spec->abs2rel($output_db_file)."\n" if $verbose;
+
+  # Make a folder to export files to, if desired
+  if($export_files) {
+    $export_directory = File::Spec->catdir($run_folder, "exports");
+    mkdir $export_directory;
+    print "Export folder: '".File::Spec->abs2rel($export_directory)."'\n" if $verbose;
+  }
+
+  # Set up database connection
+  my $dsn = "DBI:SQLite:dbname=$output_db_file";
+  my $dbh = DBI->connect($dsn) or die "Cannot open $output_db_file\n";
+
+  print "Mining: ".File::Spec->abs2rel($output_db_file)."\n";
+
+  print "\n" if $verbose;
+
+  # Fetch the table information
+  my %table_information = get_table_information($dbh);
+
+  # Identify possibly interesting blob columns
+  foreach $table (sort(keys(%table_information))) {
+    print "Investigating $table\n" if $verbose;
+
+    # Break this table out into schema and table name
+    (my $schema, my $table_name) = normalize_table_name($table);
+
+    # Figure out what the primary keys are for the table
+    my @primary_key_columns = $dbh->primary_key('', $schema, $table_name);
+    
+    # Get a summary of each blob that may contain Fun Stuff
+    my %tmp_table = %{$table_information{$table}};
+    foreach $column (keys(%tmp_table)) {
+      if($table_information{$table}{$column} eq "BLOB") {
+        check_column_for_fun($dbh, $output_db_file, $table, $column, @primary_key_columns);
+      }
+    }
+  }
+
+  # Clean up nicely
+  # $dbh->disconnect();
+  #close(RESULT_OUTPUT);
+  return 1;
+}
 
 # Function to register a blob in our overall total
 # Function takes the file_name, table_name, column_name, and file_type
@@ -204,10 +273,10 @@ sub count_mined_blob {
 # Function will return nothing (yet)
 sub check_column_for_fun {
   my $local_dbh   = @_[0];
-  my $table_name  = @_[1];
-  my $column_name = @_[2];
-  my @primary_keys = @_[3];
-
+  my $file_name   = @_[1];
+  my $table_name  = @_[2];
+  my $column_name = @_[3];
+  my @primary_keys = @_[4];
         
   # Get the real table name
   (my $tmp_schema, my $tmp_table_name) = normalize_table_name($table_name);
@@ -216,13 +285,13 @@ sub check_column_for_fun {
   my $decompressed_anything = 0;
 
   # Figure out our primary key
-  $primary_key_column;
+  my $primary_key_column;
   if(scalar(@primary_keys) >= 1) {
     $primary_key_column = @primary_keys[0];
   }
 
   # Build base query to get Fun Stuff
-  $base_query = "SELECT ";
+  my $base_query = "SELECT ";
   if($primary_key_column) {
     $base_query .= "$primary_key_column, ";
   }
@@ -252,7 +321,7 @@ sub check_column_for_fun {
       # Display output, if relevant
       print "\t$file_type: Possibly found in $column_name " if $verbose;
       $total_identified_blobs += 1;
-      count_mined_blob(File::Spec->abs2rel($output_db_file), $tmp_table_name, $column_name, $file_type);
+      count_mined_blob(File::Spec->abs2rel($file_name), $tmp_table_name, $column_name, $file_type);
 
       if($primary_key_column) {
         print "when $primary_key_column=$tmp_primary_key\n" if $verbose;
@@ -261,7 +330,7 @@ sub check_column_for_fun {
       }
 
       # Print out to the target CSV file
-      print RESULT_OUTPUT "\"$original_file_name\",\"$tmp_table_name\",\"$column_name\",\"$primary_key_column\",\"$tmp_primary_key\",\"$file_type\"";
+      print RESULT_OUTPUT "\"$file_name\",\"$tmp_table_name\",\"$column_name\",\"$primary_key_column\",\"$tmp_primary_key\",\"$file_type\"";
 
       # Save out the blob if we're exporting files
       if($export_files) {
@@ -412,6 +481,28 @@ sub create_run_output_directory {
 # Function to print our run results
 sub print_final_results {
 
+  # Tell the user what we did
+  my $identify_stats = "$total_identified_blobs potential blob file";
+  if($total_identified_blobs > 1) {
+    $identify_stats .= "s identified";
+  }
+  if($export_files && $decompress) {
+    $identify_stats .= ", decompressed, and exported";
+  } elsif($export_files) {
+    $identify_stats .= " and exported";
+  } elsif($decompress) {
+    $identify_stats .= " and decompressed";
+  }
+
+  my $stat_line = "$total_files SQLite file";
+  if($total_files >= 1) {
+    $stat_line .= "s";
+  }
+
+  print "\n#######################################################\n";
+  print "$stat_line mined, $identify_stats in $run_time seconds.\n";
+  print "Result file: ".File::Spec->abs2rel($results_file)."\n";
+
   # Loop over all files
   foreach $file_name (sort(keys(%mined_blobs))) {
     print "\n$file_name\n";
@@ -430,6 +521,7 @@ sub print_final_results {
       }
     }
   }
+  print "#######################################################\n";
 }
 
 # Function to print run header
