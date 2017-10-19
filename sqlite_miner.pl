@@ -535,12 +535,15 @@ sub print_copyright {
 # Function to print usage instructions
 sub print_usage {
   print "Usage:\n";
-  print "\tperl sqlite_miner.pl --file=<path to sqlite database> [--decompress] [--export] [--help] [--output=<path to alternate output dir>] [--verbose]\n";
-  print "\nRequired Options:\n";
+  print "\tperl sqlite_miner.pl --file=<path to database>|--dir=<path to directory> [--decompress] [--export] [--help] [--output=<path to output dir>] [--verbose]\n";
+  print "\nRequired Options (one of):\n";
   print "\t--file=<path>: Identifies the sqlite file to work on\n";
+  print "\t--dir=<path>: Identifies a directory to recursively search to find SQLite files to work on.\n";
   print "\nOptional Options:\n";
   print "\t--decompress: If set, will decompress recognized and supported compressed blobs, replacing the original blob contents on the working copy\n";
-  print "\t--export: If set, will rip all identified files out of blobs and save them in the output directory. Note: This could get big.\n";
+  print "\t\tNote: Decompress gets very slow in a database with large compressed objects. Expect this to take a few seconds to run.\n";
+  print "\t--export: If set, will rip all identified files out of blobs and save them in the output directory.\n";
+  print "\t\tNote: Especially when used in conjunction with --decompress, this could get big.\n";
   print "\t--help: Prints this message\n";
   print "\t--output=<path>: If set, will store the results in the designated folder, vice the default 'output' folder\n";
   print "\t--verbose: If set, will give much more feedback to the user\n";
@@ -548,5 +551,6 @@ sub print_usage {
   print "\nExamples:\n";
   print "\tperl sqlite_miner.pl --file=NoteStore.sqlite --decompress\n";
   print "\tperl sqlite_miner.pl --file=\"C:\\Users\\Test\\Desktop\\mailstore.sauronsmotherinlaw@gmail.com.db\" --export --verbose\n";
+  print "\tperl sqlite_miner.pl --dir=\"/home/testbed/phone_rips/backup/apps/\" --export --verbose --decompress\n";
   return 1;
 }
