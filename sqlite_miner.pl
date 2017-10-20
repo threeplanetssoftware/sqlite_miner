@@ -82,7 +82,7 @@ if($input_directory) {
   # Tell the user what we're doing
   print "Search Directory: $input_directory\n";
 
-  $output_directory = create_run_output_directory($output_directory, $input_directory);
+  $output_directory = create_run_output_directory($output_directory, "folder", 1);
 
   $results_file = create_results_file($output_directory);
 
@@ -100,7 +100,7 @@ if($input_directory) {
   );
   print "\n" if $verbose;
   foreach $tmp_file (sort(@files_to_mine)){
-    mine_file($output_directory, $tmp_file, $results_file);
+    mine_file($output_directory, $tmp_file, $results_file, 1);
   }
 }
 
@@ -110,9 +110,13 @@ if($original_file) {
   if(! -f $original_file) {
     die "File $original_file does not exist\n";
   }
- 
+
+  $output_directory = create_run_output_directory($output_directory, $original_file, 1);
+
+  $results_file = create_results_file($output_directory);
+
   # Do work, son
-  mine_file($output_directory, $original_file, $results_file);
+  mine_file($output_directory, $original_file, $results_file, 0);
 }
 
 # Finish up the timing
@@ -174,11 +178,16 @@ sub mine_file {
   my $output_directory = @_[0];
   my $original_file    = @_[1];
   my $output_file      = @_[2];
+  my $is_directory_run = @_[3];
 
   $total_files += 1;
 
   # Create the output directory
-  my $run_folder = create_run_output_directory($output_directory, $original_file);
+  my $run_folder = $output_directory;
+
+  if($is_directory_run) {  
+    $run_folder = create_run_output_directory($output_directory, $original_file, 0);
+  }
 
   if(!$output_file) {
     $output_file = create_results_file($run_folder);
@@ -229,9 +238,6 @@ sub mine_file {
     }
   }
 
-  # Clean up nicely
-  # $dbh->disconnect();
-  #close(RESULT_OUTPUT);
   return 1;
 }
 
@@ -447,7 +453,8 @@ sub get_table_information {
 # Returns a string representing the output directory
 sub create_run_output_directory {
   my $output_directory = @_[0];
-  my $original_file = @_[1];
+  my $original_file    = @_[1];
+  my $prepend_date     = @_[2]; # Boolean, 1 indicates we'll embed the date in front of this
 
   (my $tmp_volume, my $tmp_directory, my $tmp_filename) = File::Spec->splitpath($original_file);
 
@@ -458,7 +465,10 @@ sub create_run_output_directory {
   }
 
   # Create a folder for this run's output
-  my $base_run_folder = strftime("%Y_%m_%d_%H:%M_$tmp_filename",localtime);
+  my $base_run_folder = $tmp_filename;
+  if($prepend_date) {
+    $base_run_folder = strftime("%Y_%m_%d_$tmp_filename",localtime);
+  }
   my $run_folder = File::Spec->catdir($output_directory,$base_run_folder);
 
   # Check to see if that folder already exists
