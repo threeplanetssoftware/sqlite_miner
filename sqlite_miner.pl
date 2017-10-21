@@ -75,6 +75,11 @@ if($help || (!$original_file && !$input_directory)) {
 
 # See if we have a directory to work on
 if($input_directory) {
+
+  # Make directory absolute
+  $input_directory = File::Spec->rel2abs($input_directory);
+
+  # Check to make sure the directory exists
   if(! -d $input_directory) {
     die "Directory $input_directory does not exist\n";
   }
@@ -82,8 +87,13 @@ if($input_directory) {
   # Tell the user what we're doing
   print "Search Directory: $input_directory\n";
 
-  $output_directory = create_run_output_directory($output_directory, "folder", 1);
+  # Capture the lowest level folder name for the output directory
+  my $tmp_folder_name = "folder_search";
+  if($input_directory =~ /([^\\\/]+)$/) {
+    $tmp_folder_name = $1;
+  }
 
+  $output_directory = create_run_output_directory($output_directory, $tmp_folder_name, 1);
   $results_file = create_results_file($output_directory);
 
   # Pull out all potential SQLite files (based on file itself)
@@ -161,7 +171,7 @@ sub create_results_file {
   # Create the output file and spit the head to it
   my $output_file = File::Spec->catfile($run_folder, "results.csv");
   open(RESULT_OUTPUT, ">$output_file") or die "Can't open $output_file to write results\n";
-  print RESULT_OUTPUT "\"Database\",\"Table\",\"Column\",\"Primary Key Column\",\"Index\",\"File Type\"";
+  print RESULT_OUTPUT "\"Directory\",\"Database\",\"Table\",\"Column\",\"Primary Key Column\",\"Index\",\"File Type\"";
   if($export_files) {
     print RESULT_OUTPUT ",\"Export Filename\"";
   }
@@ -196,7 +206,12 @@ sub mine_file {
   # Make sure we don't mess up our original
   (my $original_file_volume, my $original_file_directory, my $original_file_name) = File::Spec->splitpath($original_file);
   $output_db_file = $original_file_name;
-  $output_db_file =~ s/(\.[^.]*)/.investigated$1/;
+  $output_db_file =~ s/\.investigated\.?//g;
+  if($output_db_file =~ s/(\.[^.]*)/.investigated$1/) {
+    #$output_db_file =~ s/(\.[^.]*)/.investigated$1/;
+  } else {
+    $output_db_file .= ".investigated";
+  }
   my $output_db_file = File::Spec->catfile($run_folder,$output_db_file);
   copy($original_file, $output_db_file) or die "Can't copy $original_file to $output_db_file - $!\n";
   print "SQLite file: ".File::Spec->abs2rel($output_db_file)."\n" if $verbose;
@@ -205,7 +220,7 @@ sub mine_file {
   if($export_files) {
     $export_directory = File::Spec->catdir($run_folder, "exports");
     mkdir $export_directory;
-    print "Export folder: '".File::Spec->abs2rel($export_directory)."'\n" if $verbose;
+    print "Export folder: ".File::Spec->abs2rel($export_directory)."\n" if $verbose;
   }
 
   # Set up database connection
@@ -336,7 +351,14 @@ sub check_column_for_fun {
       }
 
       # Print out to the target CSV file
-      print RESULT_OUTPUT "\"$file_name\",\"$tmp_table_name\",\"$column_name\",\"$primary_key_column\",\"$tmp_primary_key\",\"$file_type\"";
+      (my $tmp_volume_for_output, my $tmp_directory_for_output, my $tmp_filename_for_output) = File::Spec->splitpath($file_name);
+      print RESULT_OUTPUT "\"".File::Spec->abs2rel($tmp_directory_for_output)."\",".
+                          "\"$tmp_filename_for_output\",".
+                          "\"$tmp_table_name\",".
+                          "\"$column_name\",".
+                          "\"$primary_key_column\",".
+                          "\"$tmp_primary_key\",".
+                          "\"$file_type\"";
 
       # Save out the blob if we're exporting files
       if($export_files) {
@@ -357,12 +379,13 @@ sub check_column_for_fun {
         }
 
         # Export the file        
-        print "\tExporting file as ".File::Spec->abs2rel($tmp_export_file_path)."\n" if $very_verbose;
+        (my $tmp_export_volume_for_output, my $tmp_export_directory_for_output, my $tmp_export_filename_for_output) = File::Spec->splitpath($tmp_export_file_path);
+        print "\tExporting file as $tmp_export_filename_for_output\n" if $very_verbose;
         open(OUTPUT, ">$tmp_export_file_path");
         binmode(OUTPUT);
         print OUTPUT $tmp_data_blob;
         close(OUTPUT);
-        print RESULT_OUTPUT ",\"$tmp_export_file_path\"";
+        print RESULT_OUTPUT ",\"$tmp_export_filename_for_output\"";
       }
 
       # Update the database if we're decompressing values
