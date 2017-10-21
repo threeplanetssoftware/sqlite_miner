@@ -154,7 +154,7 @@ sub file_is_sqlite {
   open(TMP_INPUT, "<$file_path");
   binmode(TMP_INPUT);
 
-  # Read in the first 16 bytes
+  # Read in the first 16 bytes to find SQLite 3 format
   read TMP_INPUT, $tmp_header, 15;
   if($tmp_header =~ /^SQLite format 3$/) {
     $to_return = 1;
