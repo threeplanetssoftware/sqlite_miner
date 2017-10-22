@@ -17,6 +17,7 @@
 use Data::Dumper;
 use DBI;
 use File::Copy;
+use File::Path;
 use File::Spec::Functions;
 use Getopt::Long qw(:config no_auto_abbrev);
 use IO::Uncompress::AnyUncompress qw(anyuncompress $AnyUncompressError);
@@ -110,7 +111,17 @@ if($input_directory) {
   );
   print "\n" if $verbose;
   foreach $tmp_file (sort(@files_to_mine)){
-    mine_file($output_directory, $tmp_file, $results_file, 1);
+    
+    # Remember how many blobs we're currently at
+    my $current_blob_count = $total_identified_blobs;
+
+    # Run the parsing and store the export folder
+    my $tmp_run_folder = mine_file($output_directory, $tmp_file, $results_file, 1);
+
+    # Remove the copied files if we didn't actually do any work with them
+    if($total_identified_blobs == $current_blob_count) {
+      File::Path->remove_tree(File::Spec->abs2rel($tmp_run_folder)) or die "Can't remove $tmp_run_folder - $!\n";
+    }
   }
 }
 
@@ -184,6 +195,7 @@ sub create_results_file {
 
 # Function to handle mining one file
 # Function expects the output directory and original filename
+# Function returns the run folder
 sub mine_file {
   my $output_directory = @_[0];
   my $original_file    = @_[1];
@@ -206,7 +218,7 @@ sub mine_file {
   # Make sure we don't mess up our original
   (my $original_file_volume, my $original_file_directory, my $original_file_name) = File::Spec->splitpath($original_file);
   $output_db_file = $original_file_name;
-  $output_db_file =~ s/\.investigated\.?//g;
+  $output_db_file =~ s/\.investigated//g;
   if($output_db_file =~ s/(\.[^.]*)$/.investigated$1/) {
     #$output_db_file =~ s/(\.[^.]*)$/.investigated$1/;
   } else {
@@ -253,7 +265,7 @@ sub mine_file {
     }
   }
 
-  return 1;
+  return $run_folder;
 }
 
 # Function to register a blob in our overall total
