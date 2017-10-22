@@ -31,6 +31,7 @@ This script requires the following Perl packages:
 1. Data::Dumper
 2. File::Copy
 8. File::Find
+4. File::Path
 3. File::Spec::Functions
 4. Getopt
 5. IO::Uncompress
