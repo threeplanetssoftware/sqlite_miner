@@ -207,8 +207,8 @@ sub mine_file {
   (my $original_file_volume, my $original_file_directory, my $original_file_name) = File::Spec->splitpath($original_file);
   $output_db_file = $original_file_name;
   $output_db_file =~ s/\.investigated\.?//g;
-  if($output_db_file =~ s/(\.[^.]*)/.investigated$1/) {
-    #$output_db_file =~ s/(\.[^.]*)/.investigated$1/;
+  if($output_db_file =~ s/(\.[^.]*)$/.investigated$1/) {
+    #$output_db_file =~ s/(\.[^.]*)$/.investigated$1/;
   } else {
     $output_db_file .= ".investigated";
   }
@@ -411,10 +411,11 @@ sub check_column_for_fun {
         } else {
           print "\tNot updating $column_name in $table_name with decompressed data due to likely bad decompression\n" if $very_verbose;
         }
-        print RESULT_OUTPUT ",\"Decompressed\"\n";
-      } else {
-        print RESULT_OUTPUT "\n";
+        print RESULT_OUTPUT ",\"Decompressed\"";
       }
+  
+      # Close the line in the output file
+      print RESULT_OUTPUT "\n";
     }
     
   }
