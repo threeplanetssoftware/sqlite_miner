@@ -1,0 +1,42 @@
+Version 1.0.0 (October 23 2017)
+-------------
+Initial public release of SQLite Miner. Includes the following features:
+ - Reading individual SQLite database with the --file= option
+ - Recursively searching a directory for SQLite databases using the --dir= option
+ - Decompressing compressed files using IO::AnyUncompress with the --decompress option
+ - Exporting identified blobs using the --export option
+ - Printing basic usage with --help
+ - Changing the output directory using the --output= option
+ - Verbose output using the --verbose option
+ - VERY verbose output using the --very-verbose option
+ - The following filetypes:
+  7ZIP
+  BZIP
+  GZIP
+  LZ4
+  RAR
+  RAR_5.0
+  ZIP
+  ZIP_EMPTY
+  ZIP_SPAN
+  ZLIB_LOW
+  ZLIB
+  ZLIB_MAX
+  BPLIST
+  XML
+  BMP
+  JPEG_RAW
+  JPEG_JFIF
+  JPEG_EXIF
+  GIF
+  PNG
+  WEBP
+  MP3
+  MP3_ID3
+  OGG
+  WAV
+  FLAC
+  PDF
+  RTF
+  iNote
+  DALVIK_EXECUTABLE
