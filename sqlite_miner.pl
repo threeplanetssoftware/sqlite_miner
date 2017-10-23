@@ -25,6 +25,8 @@ use POSIX qw(strftime);
 use Time::HiRes qw(time);
 use File::Find;
 
+my $version = "1.0.0";
+
 # Set up initial variables
 my $start_time = time;
 our $verbose = 0;
@@ -572,7 +574,7 @@ sub print_final_results {
 
 # Function to print run header
 sub print_copyright {
-  print "SQLite Miner - Copyright (C) 2017 Jon Baumann, Ciofeca Forensics (https://www.ciofecaforensics.com)\n";
+  print "SQLite Miner $version - Copyright (C) 2017 Jon Baumann, Ciofeca Forensics (https://www.ciofecaforensics.com)\n";
   print "\tThis program comes with ABSOLUTELY NO WARRANTY;\n";
   print "\tThis is free software, and you are welcome to redistribute it under certain conditions.\n";
   print "\tSee http://www.gnu.org/licenses/\n\n";
