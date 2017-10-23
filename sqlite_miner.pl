@@ -581,7 +581,7 @@ sub print_copyright {
 # Function to print usage instructions
 sub print_usage {
   print "Usage:\n";
-  print "\tperl sqlite_miner.pl --file=<path to database>|--dir=<path to directory> [--decompress] [--export] [--help] [--output=<path to output dir>] [--verbose]\n";
+  print "\tperl sqlite_miner.pl --file=<path to database>|--dir=<path to directory> [--decompress] [--export] [--help] [--output=<path to output dir>] [--verbose|--very-verbose]\n";
   print "\nRequired Options (one of):\n";
   print "\t--file=<path>: Identifies the sqlite file to work on\n";
   print "\t--dir=<path>: Identifies a directory to recursively search to find SQLite files to work on.\n";
