@@ -25,7 +25,7 @@ use POSIX qw(strftime);
 use Time::HiRes qw(time);
 use File::Find;
 
-my $version = "1.0.0";
+my $version = "1.1.0";
 
 # Set up initial variables
 my $start_time = time;
