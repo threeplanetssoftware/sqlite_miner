@@ -63,7 +63,7 @@ GetOptions('file=s'       => \$original_file,
 # Set verbose if very-verbose was chosen
 $verbose = $verbose || $very_verbose;
 
-print_copyright();
+print_copyright(STDOUT);
 
 # Set other files to read in
 my $fun_stuff_file = "fun_stuff.pl";
@@ -253,9 +253,18 @@ sub create_results_file {
 # Function returns a file handle
 sub open_log_file {
   my $run_folder = @_[0];
+
+  # Build log file path
   my $log_file = File::Spec->catfile($run_folder, "log.txt");
+
+  # Open the file
   open(LOG_OUTPUT, ">$log_file") or die "Can't open $log_file - $!\n";;
+  
+  # Kick out the usual jargon and a creation note
+  print_copyright(LOG_OUTPUT);
   log_line(LOG_OUTPUT, "Log file opened - ".File::Spec->abs2rel($log_file)."\n");
+
+  # Give back the file handle
   return LOG_OUTPUT;
 }
 
@@ -449,8 +458,8 @@ sub check_column_for_fun {
           $tmp_export_file_name .= "-".$primary_key_column."-".$tmp_primary_key;
         }
         $tmp_export_file_name .= ".blob.".$fun_stuff{$file_type}{'extension'};
-        $tmp_export_file_path = File::Spec->catfile($export_directory, $tmp_export_file_name);
-        $tmp_export_file_counter = 1;
+        my $tmp_export_file_path = File::Spec->catfile($export_directory, $tmp_export_file_name);
+        my $tmp_export_file_counter = 1;
         
         # Keep looping until we're sure we have a unique file path
         while(-e $tmp_export_file_path) {
@@ -461,10 +470,14 @@ sub check_column_for_fun {
         # Export the file        
         (my $tmp_export_volume_for_output, my $tmp_export_directory_for_output, my $tmp_export_filename_for_output) = File::Spec->splitpath($tmp_export_file_path);
         print_log_line_if($log_file_handle, "\tExporting file as $tmp_export_filename_for_output\n", $very_verbose);
-        open(OUTPUT, ">$tmp_export_file_path");
-        binmode(OUTPUT);
-        print OUTPUT $tmp_data_blob;
-        close(OUTPUT);
+
+        # Save off the file
+        open(EXPORT_OUTPUT, ">$tmp_export_file_path");
+        binmode(EXPORT_OUTPUT);
+        print EXPORT_OUTPUT $tmp_data_blob;
+        close(EXPORT_OUTPUT);
+
+        # Record where we stored this
         print RESULT_OUTPUT ",\"$tmp_export_filename_for_output\"";
       }
 
@@ -474,6 +487,36 @@ sub check_column_for_fun {
 
         # Decompress the blob
         anyuncompress(\$tmp_data_blob => \$tmp_new_blob);
+
+        # Save off the decompressed blob as well if we want to export
+        if($export_files and length($tmp_new_blob) > 0) {
+
+          # At some point this should become its own function
+          # Build the export filename (TABLE_COLUMN_[PRIMARYKEYCOLUMN_PRIMARYKEY].blob)
+          my $tmp_export_file_name = $tmp_table_name."-".$column_name;
+          if($tmp_primary_key) {
+            $tmp_export_file_name .= "-".$primary_key_column."-".$tmp_primary_key;
+          }
+          $tmp_export_file_name .= ".blob.decompressed";
+          my $tmp_export_file_path = File::Spec->catfile($export_directory, $tmp_export_file_name);
+          my $tmp_export_file_counter = 1;
+          
+          # Keep looping until we're sure we have a unique file path
+          while(-e $tmp_export_file_path) {
+            $tmp_export_file_counter += 1;
+            $tmp_export_file_path = File::Spec->catfile($export_directory, $tmp_export_file_name."_".$tmp_export_file_counter);
+          }
+
+          # Export the file        
+          (my $tmp_export_volume_for_output, my $tmp_export_directory_for_output, my $tmp_export_filename_for_output) = File::Spec->splitpath($tmp_export_file_path);
+          print_log_line_if($log_file_handle, "\tExporting decompressed file as $tmp_export_filename_for_output\n", $very_verbose);
+
+          # Save off the file
+          open(EXPORT_OUTPUT, ">$tmp_export_file_path");
+          binmode(EXPORT_OUTPUT);
+          print EXPORT_OUTPUT $tmp_new_blob;
+          close(EXPORT_OUTPUT);
+        }
 
         # Build and execute our query to update the database
         if(length($tmp_new_blob) > 0 and $tmp_primary_key) {
@@ -641,10 +684,11 @@ sub print_final_results {
 
 # Function to print run header
 sub print_copyright {
-  print "SQLite Miner $version - Copyright (C) 2017 Jon Baumann, Ciofeca Forensics (https://www.ciofecaforensics.com)\n";
-  print "\tThis program comes with ABSOLUTELY NO WARRANTY;\n";
-  print "\tThis is free software, and you are welcome to redistribute it under certain conditions.\n";
-  print "\tSee http://www.gnu.org/licenses/\n\n";
+  my $file_handle = @_[0];
+  print $file_handle "SQLite Miner $version - Copyright (C) 2017 Jon Baumann, Ciofeca Forensics (https://www.ciofecaforensics.com)\n";
+  print $file_handle "\tThis program comes with ABSOLUTELY NO WARRANTY;\n";
+  print $file_handle "\tThis is free software, and you are welcome to redistribute it under certain conditions.\n";
+  print $file_handle "\tSee http://www.gnu.org/licenses/\n\n";
 }
 
 # Function to print usage instructions
