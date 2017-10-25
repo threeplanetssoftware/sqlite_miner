@@ -36,7 +36,8 @@ my $input_directory = 0;
 my $help = 0;
 my $decompress = 0;
 my $export_files = 0;
-#my $output_file = 0;
+my $log_file_handle = 0;
+
 
 # Set up variables for what we mine
 my $total_identified_blobs = 0;
@@ -76,7 +77,9 @@ if($help || (!$original_file && !$input_directory)) {
   exit();
 }
 
+#
 # See if we have a directory to work on
+#
 if($input_directory) {
 
   # Make directory absolute
@@ -87,9 +90,6 @@ if($input_directory) {
     die "Directory $input_directory does not exist\n";
   }
 
-  # Tell the user what we're doing
-  print "Search Directory: $input_directory\n";
-
   # Capture the lowest level folder name for the output directory
   my $tmp_folder_name = "folder_search";
   if($input_directory =~ /([^\\\/]+)$/) {
@@ -97,7 +97,11 @@ if($input_directory) {
   }
 
   $output_directory = create_run_output_directory($output_directory, $tmp_folder_name, 1);
-  $results_file = create_results_file($output_directory);
+  $log_file_handle = open_log_file($output_directory);
+  $results_file = create_results_file($output_directory, $log_file_handle);
+
+  # Tell the user what we're doing
+  print_log_line($log_file_handle, "Search Directory: $input_directory\n");
 
   # Pull out all potential SQLite files (based on file itself)
   my @files_to_mine;
@@ -105,29 +109,31 @@ if($input_directory) {
     sub {
       if(! -d $_ && file_is_sqlite($_)) {
         my $tmp_filepath = $File::Find::name;
-        print "Found SQLite: $tmp_filepath!\n" if $verbose;
+        print_log_line_if($log_file_handle, "Found SQLite: $tmp_filepath\n", $verbose);
         push(@files_to_mine, $tmp_filepath);
       }
     },
     $input_directory
   );
-  print "\n" if $verbose;
+  print_log_line_if($log_file_handle, "\n", $verbose);
   foreach $tmp_file (sort(@files_to_mine)){
     
     # Remember how many blobs we're currently at
     my $current_blob_count = $total_identified_blobs;
 
     # Run the parsing and store the export folder
-    my $tmp_run_folder = mine_file($output_directory, $tmp_file, $results_file, 1);
+    my $tmp_run_folder = mine_file($output_directory, $tmp_file, $results_file, 1, $log_file_handle);
 
     # Remove the copied files if we didn't actually do any work with them
     if($total_identified_blobs == $current_blob_count) {
-      File::Path->remove_tree(File::Spec->abs2rel($tmp_run_folder)) or die "Can't remove $tmp_run_folder - $!\n";
+      File::Path->remove_tree(File::Spec->abs2rel($tmp_run_folder));
     }
   }
 }
 
+#
 # See if we have a file to work on
+#
 if($original_file) {
   # Check to ensure the file actually exists
   if(! -f $original_file) {
@@ -135,11 +141,11 @@ if($original_file) {
   }
 
   $output_directory = create_run_output_directory($output_directory, $original_file, 1);
-
-  $results_file = create_results_file($output_directory);
+  $log_file_handle = open_log_file($output_directory);
+  $results_file = create_results_file($output_directory, $log_file_handle);
 
   # Do work, son
-  mine_file($output_directory, $original_file, $results_file, 0);
+  mine_file($output_directory, $original_file, $results_file, 0, $log_file_handle);
 }
 
 # Finish up the timing
@@ -147,13 +153,59 @@ my $end_time = time;
 my $run_time = sprintf("%.4f", $end_time - $start_time);
 
 # Give the user some feedback
-print_final_results();
+print_final_results($log_file_handle);
+close($log_file_handle);
 
 exit;
 
 ####################
 # Functions follow #
 ####################
+
+# Function to log a line of text
+# Function takes the text to log and a file handle for the log file
+sub log_line {
+  my $log_file_handle = @_[0];
+  my $line            = @_[1];
+ 
+  if(!$log_file_handle) {
+    die "Bad log file handle provided, exiting. Tried to print: $line\n";
+  }
+ 
+  print $log_file_handle $line;
+}
+
+# Function to print and log a line of text
+# Function takes the text to print and log and a file handle for the log file
+sub print_log_line {
+  my $log_file_handle = @_[0];
+  my $line            = @_[1];
+ 
+  print STDOUT $line; 
+  log_line($log_file_handle, $line);
+}
+
+# Function to print and log a line of text if a boolean is true
+# Function takes the text to print and log, a file handle for the log file, and a boolean
+sub print_log_line_if {
+  my $log_file_handle = @_[0];
+  my $line            = @_[1];
+  my $condition       = @_[2];
+ 
+  if($condition) {
+    print_log_line($log_file_handle, $line); 
+  }
+}
+
+# Function to print and log a line of text before dying
+# Function takes the text to print and log and a file handle for the log file
+sub print_log_die {
+  my $log_file_handle = @_[0];
+  my $line            = @_[1];
+
+  print_log_line($log_file_handle, $line);
+  die;
+}
 
 # Function that identifies a SQLite file
 # Function expects a path
@@ -180,10 +232,11 @@ sub file_is_sqlite {
 # Function requires a path to the run folder and that's it
 sub create_results_file {
   my $run_folder = @_[0];
+  my $log_file_handle = @_[1];
 
   # Create the output file and spit the head to it
   my $output_file = File::Spec->catfile($run_folder, "results.csv");
-  open(RESULT_OUTPUT, ">$output_file") or die "Can't open $output_file to write results\n";
+  open(RESULT_OUTPUT, ">$output_file") or print_log_die($log_file_handle, "Can't open $output_file to write results\n");
   print RESULT_OUTPUT "\"Directory\",\"Database\",\"Table\",\"Column\",\"Primary Key Column\",\"Index\",\"File Type\"";
   if($export_files) {
     print RESULT_OUTPUT ",\"Export Filename\"";
@@ -195,6 +248,17 @@ sub create_results_file {
   return $output_file;
 }
 
+# Function to create the log file
+# Function requires a path to the run folder
+# Function returns a file handle
+sub open_log_file {
+  my $run_folder = @_[0];
+  my $log_file = File::Spec->catfile($run_folder, "log.txt");
+  open(LOG_OUTPUT, ">$log_file") or die "Can't open $log_file - $!\n";;
+  log_line(LOG_OUTPUT, "Log file opened - ".File::Spec->abs2rel($log_file)."\n");
+  return LOG_OUTPUT;
+}
+
 # Function to handle mining one file
 # Function expects the output directory and original filename
 # Function returns the run folder
@@ -203,6 +267,7 @@ sub mine_file {
   my $original_file    = @_[1];
   my $output_file      = @_[2];
   my $is_directory_run = @_[3];
+  my $log_file_handle  = @_[4];
 
   $total_files += 1;
 
@@ -214,7 +279,7 @@ sub mine_file {
   }
 
   if(!$output_file) {
-    $output_file = create_results_file($run_folder);
+    $output_file = create_results_file($run_folder, $log_file_handle);
   }
 
   # Make sure we don't mess up our original
@@ -228,29 +293,29 @@ sub mine_file {
   }
   my $output_db_file = File::Spec->catfile($run_folder,$output_db_file);
   copy($original_file, $output_db_file) or die "Can't copy $original_file to $output_db_file - $!\n";
-  print "SQLite file: ".File::Spec->abs2rel($output_db_file)."\n" if $verbose;
+  print_log_line_if($log_file_handle, "SQLite file: ".File::Spec->abs2rel($output_db_file)."\n", $verbose);
 
   # Make a folder to export files to, if desired
   if($export_files) {
     $export_directory = File::Spec->catdir($run_folder, "exports");
     mkdir $export_directory;
-    print "Export folder: ".File::Spec->abs2rel($export_directory)."\n" if $verbose;
+    print_log_line_if($log_file_handle, "Export folder: ".File::Spec->abs2rel($export_directory)."\n", $verbose);
   }
 
   # Set up database connection
   my $dsn = "DBI:SQLite:dbname=$output_db_file";
-  my $dbh = DBI->connect($dsn) or die "Cannot open $output_db_file\n";
+  my $dbh = DBI->connect($dsn) or print_log_die($log_file_handle, "Cannot open $output_db_file\n");
 
-  print "Mining: ".File::Spec->abs2rel($output_db_file)."\n";
+  print_log_line($log_file_handle, "Mining: ".File::Spec->abs2rel($output_db_file)."\n");
 
-  print "\n" if $verbose;
+  print_log_line_if($log_file_handle, "\n", $verbose);
 
   # Fetch the table information
   my %table_information = get_table_information($dbh);
 
   # Identify possibly interesting blob columns
   foreach $table (sort(keys(%table_information))) {
-    print "Investigating $table\n" if $verbose;
+    print_log_line_if($log_file_handle, "Investigating $table\n", $verbose);
 
     # Break this table out into schema and table name
     (my $schema, my $table_name) = normalize_table_name($table);
@@ -262,7 +327,7 @@ sub mine_file {
     my %tmp_table = %{$table_information{$table}};
     foreach $column (keys(%tmp_table)) {
       if($table_information{$table}{$column} eq "BLOB") {
-        check_column_for_fun($dbh, $output_db_file, $table, $column, @primary_key_columns);
+        check_column_for_fun($dbh, $output_db_file, $table, $column, $log_file_handle, @primary_key_columns);
       }
     }
   }
@@ -307,11 +372,12 @@ sub count_mined_blob {
 # Function needs to be provided a database handle, table name, column name, and array of primary keys
 # Function will return nothing (yet)
 sub check_column_for_fun {
-  my $local_dbh   = @_[0];
-  my $file_name   = @_[1];
-  my $table_name  = @_[2];
-  my $column_name = @_[3];
-  my @primary_keys = @_[4];
+  my $local_dbh       = @_[0];
+  my $file_name       = @_[1];
+  my $table_name      = @_[2];
+  my $column_name     = @_[3];
+  my $log_file_handle = @_[4];
+  my @primary_keys    = @_[5];
         
   # Get the real table name
   (my $tmp_schema, my $tmp_table_name) = normalize_table_name($table_name);
@@ -354,14 +420,14 @@ sub check_column_for_fun {
       }
 
       # Display output, if relevant
-      print "\t$file_type: Possibly found in $column_name " if $verbose;
+      print_log_line_if($log_file_handle, "\t$file_type: Possibly found in $column_name ", $verbose);
       $total_identified_blobs += 1;
       count_mined_blob(File::Spec->abs2rel($file_name), $tmp_table_name, $column_name, $file_type);
 
       if($primary_key_column) {
-        print "when $primary_key_column=$tmp_primary_key\n" if $verbose;
+        print_log_line_if($log_file_handle, "when $primary_key_column=$tmp_primary_key\n", $verbose);
       } else {
-        print "(no primary key)\n" if $verbose;
+        print_log_line_if($log_file_handle, "(no primary key)\n", $verbose);
       }
 
       # Print out to the target CSV file
@@ -394,7 +460,7 @@ sub check_column_for_fun {
 
         # Export the file        
         (my $tmp_export_volume_for_output, my $tmp_export_directory_for_output, my $tmp_export_filename_for_output) = File::Spec->splitpath($tmp_export_file_path);
-        print "\tExporting file as $tmp_export_filename_for_output\n" if $very_verbose;
+        print_log_line_if($log_file_handle, "\tExporting file as $tmp_export_filename_for_output\n", $very_verbose);
         open(OUTPUT, ">$tmp_export_file_path");
         binmode(OUTPUT);
         print OUTPUT $tmp_data_blob;
@@ -414,16 +480,16 @@ sub check_column_for_fun {
           my $tmp_update_query = "UPDATE $table_name SET $column_name=? WHERE $primary_key_column=?";
           my $tmp_update_query_handler = $local_dbh->prepare($tmp_update_query);
           $tmp_update_query_handler->execute($tmp_new_blob, $tmp_primary_key);
-          print "\tUpdated $column_name in $table_name with decompressed data when $primary_key_column=$tmp_primary_key\n" if $very_verbose;
+          print_log_line_if($log_file_handle, "\tUpdated $column_name in $table_name with decompressed data when $primary_key_column=$tmp_primary_key\n", $very_verbose);
           $decompressed_anything = 1;
         } elsif(length($tmp_new_blob) > 0 and !$tmp_primary_key) {
           my $tmp_update_query = "UPDATE $table_name SET $column_name=?";
           my $tmp_update_query_handler = $local_dbh->prepare($tmp_update_query);
           $tmp_update_query_handler->execute($tmp_new_blob);
-          print "\tUpdated $column_name in $table_name with decompressed data (no primary key)\n" if $very_verbose;
+          print_log_line_if($log_file_handle, "\tUpdated $column_name in $table_name with decompressed data (no primary key)\n", $very_verbose);
           $decompressed_anything = 1;
         } else {
-          print "\tNot updating $column_name in $table_name with decompressed data due to likely bad decompression\n" if $very_verbose;
+          print_log_line_if($log_file_handle, "\tNot updating $column_name in $table_name with decompressed data due to likely bad decompression\n", $very_verbose);
         }
         print RESULT_OUTPUT ",\"Decompressed\"";
       }
@@ -528,6 +594,7 @@ sub create_run_output_directory {
 
 # Function to print our run results
 sub print_final_results {
+  my $log_file_handle = @_[0];
 
   # Tell the user what we did
   my $identify_stats = "$total_identified_blobs potential blob file";
@@ -543,33 +610,33 @@ sub print_final_results {
   }
 
   my $stat_line = "$total_files SQLite file";
-  if($total_files >= 1) {
+  if($total_files > 1) {
     $stat_line .= "s";
   }
 
-  print "\n#######################################################\n";
-  print "$stat_line mined, $identify_stats in $run_time seconds.\n";
-  print "Result file: ".File::Spec->abs2rel($results_file)."\n";
+  print_log_line($log_file_handle, "\n#######################################################\n");
+  print_log_line($log_file_handle, "$stat_line mined, $identify_stats in $run_time seconds.\n");
+  print_log_line($log_file_handle, "Result file: ".File::Spec->abs2rel($results_file)."\n");
 
   # Loop over all files
   foreach $file_name (sort(keys(%mined_blobs))) {
-    print "\n$file_name\n";
+    print_log_line($log_file_handle, "\n$file_name\n");
     foreach $table_name (sort(keys(%{$mined_blobs{$file_name}}))) {
-      print "\t$table_name table:\n";
+      print_log_line($log_file_handle, "\t$table_name table:\n");
       foreach $column_name (keys(%{$mined_blobs{$file_name}{$table_name}})) {
-        print "\t\t$column_name column: ";
+        print_log_line($log_file_handle, "\t\t$column_name column: ");
         my $file_types = 0;
         foreach $file_type (keys(%{$mined_blobs{$file_name}{$table_name}{$column_name}})) {
           $count = $mined_blobs{$file_name}{$table_name}{$column_name}{$file_type};
-          print ", " if $file_types;
-          print "$count $file_type";
+          print_log_line_if($log_file_handle, ", ", $file_types);
+          print_log_line($log_file_handle, "$count $file_type");
           $file_types += 1;
         }
-        print "\n";
+        print_log_line($log_file_handle, "\n");
       }
     }
   }
-  print "#######################################################\n";
+  print_log_line($log_file_handle, "#######################################################\n");
 }
 
 # Function to print run header

@@ -1,3 +1,11 @@
+Version 1.1.0 (October 24 2017)
+-------------
+New Features
+ - Added a log file for each run to store the same output as is displayed on the screen
+ - Moved all output to log functions that copy anything displayed to aforementioned logs
+Bug Fixes
+ - Typos in some of the output lines
+
 Version 1.0.0 (October 23 2017)
 -------------
 Initial public release of SQLite Miner. Includes the following features:
