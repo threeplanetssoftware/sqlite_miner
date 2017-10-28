@@ -13,10 +13,13 @@ This script is run by perl on a command line. The easiest usage is to look at on
 
 For a larger outlook, the script can be run to recursively look at an entire directory with `perl sqlite_miner.pl --dir=<path to directory>`. That will cause the script to recursively walk through every file under that directory, check the file's header to see if it is SQLite format 3, and run each identified SQLite file as if it had been done using the `--file=` option above. The only difference is all of the results from that entire folder will be stored under an output directory named `YYYY_MM_DD_<folder_name>`. For example, running this on /home/test/backup_unpacked today will generate `2017_10_21_backup_unpacked/`. The `results.csv` will contain all results from the entire directory, but each specific database will have its own output folder within the overall directory.
 
+The script can also be used to open an Adnroid backup without unpacking it first with `perl sqlite_miner.pl --android-backup=<path to backup>`. That will cause the script to open the Android backup, decompress the TAR portion to a temporary folder, then recurseivly walk through the TAR file, exporting any files that have a SQLite format 3 header. Then the script will behave the same as using the `--dir=` option described above. When done, the script will remove the temporary folder that the TAR file was saved in, but please be aware that for large, full, backups, this may result in an additional 1GB+ of space (the same amount of sapce as if you decompressed the file in order to run the `--dir=` option against an actual folder. 
+
 ### Options
 The required options that are currently supported are (one of):
 1. `--file=`: This option tells the script where to find the SQLite you want to mine. 
 2. `--dir=`: This option tells the script where to find a directory to recursively search for SQLite format 3 database files and to parse each of them as if the --fiile option was called on them above.
+3. `--android-backup=`: This option tells the script where to find ain Android backup file to recursively search for SQLite format 3 database files and to parse each of them as if the --fiile option was called on them above.
 
 The optional arguments are:
 1. `--decompress`: This option tells the script to decompress any compressed data it knows it can unpack and replace the original data with the decompressed data to provide the examiner with a plaintext view. Note, this option drastically increases the run time as now the script is reading in the comrpessed object, decompressing it, and writing it back into the database.
@@ -28,6 +31,7 @@ The optional arguments are:
 
 ## Requirements
 This script requires the following Perl packages:
+1. Archive::Tar
 1. Data::Dumper
 2. File::Copy
 8. File::Find

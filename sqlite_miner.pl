@@ -14,18 +14,19 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use Archive::Tar;
 use Data::Dumper;
 use DBI;
 use File::Copy;
+use File::Find;
 use File::Path;
 use File::Spec::Functions;
 use Getopt::Long qw(:config no_auto_abbrev);
 use IO::Uncompress::AnyUncompress qw(anyuncompress $AnyUncompressError);
 use POSIX qw(strftime);
 use Time::HiRes qw(time);
-use File::Find;
 
-my $version = "1.1.0";
+my $version = "1.2.0";
 
 # Set up initial variables
 my $start_time = time;
@@ -33,6 +34,7 @@ our $verbose = 0;
 our $very_verbose = 0;
 my $original_file = 0;
 my $input_directory = 0;
+my $android_backup = 0;
 my $help = 0;
 my $decompress = 0;
 my $export_files = 0;
@@ -51,14 +53,15 @@ my $base_directory = File::Spec->rel2abs(File::Spec->curdir());
 my $output_directory = catdir($base_directory,'output');
 
 # Read in options
-GetOptions('file=s'       => \$original_file,
-           'dir=s'        => \$input_directory,
-           'decompress'   => \$decompress,
-           'export'       => \$export_files,
-           'verbose'      => \$verbose,
-           'very-verbose' => \$very_verbose,
-           'output=s'     => \$output_directory,
-           'help'         => \$help);
+GetOptions('file=s'           => \$original_file,
+           'dir=s'            => \$input_directory,
+           'android-backup=s' => \$android_backup,
+           'decompress'       => \$decompress,
+           'export'           => \$export_files,
+           'verbose'          => \$verbose,
+           'very-verbose'     => \$very_verbose,
+           'output=s'         => \$output_directory,
+           'help'             => \$help);
 
 # Set verbose if very-verbose was chosen
 $verbose = $verbose || $very_verbose;
@@ -71,8 +74,8 @@ my $fun_stuff_file = "fun_stuff.pl";
 # Import our hash of Fun Stuff to look for
 require $fun_stuff_file;
 
-# Ensure we have a file to work on
-if($help || (!$original_file && !$input_directory)) {
+# Ensure we have something to work on
+if($help || (!$original_file && !$input_directory && !$android_backup)) {
   print_usage();
   exit();
 }
@@ -140,12 +143,31 @@ if($original_file) {
     die "File $original_file does not exist\n";
   }
 
+  # Create output directories
   $output_directory = create_run_output_directory($output_directory, $original_file, 1);
   $log_file_handle = open_log_file($output_directory);
   $results_file = create_results_file($output_directory, $log_file_handle);
 
   # Do work, son
   mine_file($output_directory, $original_file, $results_file, 0, $log_file_handle);
+}
+
+#
+# See if we have an Android backup to work on
+#
+if($android_backup) {
+  # Check to ensure the file actually exists
+  if(! -f $android_backup) {
+    die "File $android_backup does not exist\n";
+  }
+
+  # Create output directories
+  $output_directory = create_run_output_directory($output_directory, $android_backup, 1);
+  $log_file_handle = open_log_file($output_directory);
+  $results_file = create_results_file($output_directory, $log_file_handle);
+
+  extract_sqlite_from_android_backup($android_backup, $log_file_handle, $output_directory, $results_file);
+
 }
 
 # Finish up the timing
@@ -682,6 +704,96 @@ sub print_final_results {
   print_log_line($log_file_handle, "#######################################################\n");
 }
 
+# Function to open Android backups and export any SQLite files
+# Function expects an absolute file path to the backup, a log filename, the output directory, and the results file path
+sub extract_sqlite_from_android_backup {
+  my $android_backup   = @_[0];
+  my $log_file_handle  = @_[1];
+  my $output_directory = @_[2];
+  my $results_file     = @_[3];
+
+  # Create a temporary space to hold our work
+  my $tmp_export_dir = File::Spec->catdir(File::Spec->curdir(), ".decompressed_tmp");
+  mkdir $tmp_export_dir;
+  print_log_line($log_file_handle, "Creating temporary directory for decompressed files: ".File::Spec->abs2rel($tmp_export_dir)."\n");
+
+  # Identify where we'll put the TAR portion of the backup
+  my $tmp_android_tar_file = File::Spec->catfile($tmp_export_dir, "backup.tar");
+
+  my $tar_handler = new Archive::Tar;
+
+  # Open the full Android backup and remove the header
+  print_log_line_if($log_file_handle, "Opening Android backup and saving a copy, this may take a few seconds\n", $verbose);
+  open(ANDROIDBACKUP, "<$android_backup");
+  undef $/;
+  seek(ANDROIDBACKUP, 24, 0);
+  my $entire_tar = <ANDROIDBACKUP>; # Get everything that's after the header
+  close(ANDROIDBACKUP);
+
+  # Decrompress the android backup's ZLIB and save it to disk (Archive::Tar won't work from memory)
+  anyuncompress(\$entire_tar, $tmp_android_tar_file);
+  print_log_line_if($log_file_handle, "Saving the TAR portion of the backup to: ".File::Spec->abs2rel($tmp_android_tar_file)."\n", $verbose);
+
+  # Open the TAR archive
+  $tar_handler->read($tmp_android_tar_file);
+  print_log_line($log_file_handle, "Opening TAR portion of archive\n");
+
+  # Loop over all the files contained therein
+  my $tmp_tar_files_extracted = 0;
+  my @tmp_tar_files = $tar_handler->list_files();
+  foreach $tmp_tar_file (@tmp_tar_files) {
+    my $tmp_tar_content = $tar_handler->get_content($tmp_tar_file);
+
+    # Check for SQLite files and save them to the export directory
+    if($tmp_tar_content =~ /^SQLite format 3/) {
+      my $tmp_sqlite_file = File::Spec->catfile($tmp_export_dir, $tmp_tar_file);
+      $tar_handler->extract_file($tmp_tar_file, $tmp_sqlite_file);
+      print_log_line_if($log_file_handle, "Found embedded SQLite file in TAR: $tmp_tar_file\n", $very_verbose);
+      $tmp_tar_files_extracted += 1;
+    }
+  }
+
+  # Walk through exported files and mine them all
+  my @files_to_mine;
+  find(
+    sub {
+      if(! -d $_ && file_is_sqlite($_)) {
+        my $tmp_filepath = $File::Find::name;
+        print_log_line_if($log_file_handle, "Found SQLite: $tmp_filepath\n", $verbose);
+        push(@files_to_mine, $tmp_filepath);
+      }
+    },
+    $tmp_export_dir
+  );
+  print_log_line_if($log_file_handle, "\n", $verbose);
+  foreach $tmp_file (sort(@files_to_mine)){
+    
+    # Remember how many blobs we're currently at
+    my $current_blob_count = $total_identified_blobs;
+
+    # Run the parsing and store the export folder
+    my $tmp_run_folder = mine_file($output_directory, $tmp_file, $results_file, 1, $log_file_handle);
+
+    # Remove the copied files if we didn't actually do any work with them
+    if($total_identified_blobs == $current_blob_count) {
+      File::Path->remove_tree(File::Spec->abs2rel($tmp_run_folder));
+    }
+  }
+
+  # Tell the user what we've done here
+  my $tmp_tar_status_line = "Found $tmp_tar_files_extracted SQLite database";
+  if($tmp_tar_files_extracted > 1) {
+    $tmp_tar_status_line .= "s";
+  }
+  $tmp_tar_status_line .= " in the Android backup, mining them all.\n";
+  print_log_line_if($log_file_handle, $tmp_tar_status_line, $tmp_tar_files_extracted);
+  print_log_line_if($log_file_handle, "Found no SQLite databases in Android backup.\n", !$tmp_tar_files_extracted);
+
+  # Clean up our temporary directory
+  File::Path->remove_tree($tmp_export_dir);
+  print_log_line_if($log_file_handle, "Removing temporary directory for decompressed files: ".File::Spec->abs2rel($tmp_export_dir)."\n", $verbose);
+}
+
 # Function to print run header
 sub print_copyright {
   my $file_handle = @_[0];
@@ -698,6 +810,8 @@ sub print_usage {
   print "\nRequired Options (one of):\n";
   print "\t--file=<path>: Identifies the sqlite file to work on\n";
   print "\t--dir=<path>: Identifies a directory to recursively search to find SQLite files to work on.\n";
+  print "\t--android-backup=<path>: Identifies an Android backup to open and search for SQLite files to work on.\n";
+  print "\t\tNote: This will unpack the Android backup on disk for TAR, so please ensure you have available space.\n";
   print "\nOptional Options:\n";
   print "\t--decompress: If set, will decompress recognized and supported compressed blobs, replacing the original blob contents on the working copy\n";
   print "\t\tNote: Decompress gets very slow in a database with large compressed objects. Expect this to take a few seconds to run.\n";
@@ -711,5 +825,6 @@ sub print_usage {
   print "\tperl sqlite_miner.pl --file=NoteStore.sqlite --decompress\n";
   print "\tperl sqlite_miner.pl --file=\"C:\\Users\\Test\\Desktop\\mailstore.sauronsmotherinlaw@gmail.com.db\" --export --verbose\n";
   print "\tperl sqlite_miner.pl --dir=\"/home/testbed/phone_rips/backup/apps/\" --export --verbose --decompress\n";
+  print "\tperl sqlite_miner.pl --android-backup=\"/home/testbed/phone_rips/jon_phone_2017_10_24_backup.ab\" --export --decompress\n";
   return 1;
 }
