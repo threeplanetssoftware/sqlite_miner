@@ -629,7 +629,7 @@ sub create_run_output_directory {
 
   # Check to make sure the overall output folder exists
   if(! -e $output_directory) {
-    print "Output folder: ".File::Spec->abs2rel($output_directory)."\n" if $verbose;
+    print "\nOutput folder: ".File::Spec->abs2rel($output_directory)."\n" if $verbose;
     mkdir $output_directory;
   }
 
@@ -712,82 +712,96 @@ sub extract_sqlite_from_android_backup {
   my $output_directory = @_[2];
   my $results_file     = @_[3];
 
+  print_log_line($log_file_handle, "Searching Android backup file: ".File::Spec->abs2rel($android_backup)."\n");
+
   # Create a temporary space to hold our work
   my $tmp_export_dir = File::Spec->catdir(File::Spec->curdir(), ".decompressed_tmp");
+
+  # Clean up from any previous runs that error'd out
+  if(-e $tmp_export_dir) {
+    print_log_line_if($log_file_handle, "Deleting existing export directory left over from previous run\n", $very_verbose;
+    File::Path->remove_tree($tmp_export_dir);
+  }
+
+  # Create export directory
   mkdir $tmp_export_dir;
-  print_log_line($log_file_handle, "Creating temporary directory for decompressed files: ".File::Spec->abs2rel($tmp_export_dir)."\n");
+  print_log_line_if($log_file_handle, "Creating temporary directory for decompressed files: ".File::Spec->abs2rel($tmp_export_dir)."\n", $verbose);
 
   # Identify where we'll put the TAR portion of the backup
   my $tmp_android_tar_file = File::Spec->catfile($tmp_export_dir, "backup.tar");
 
-  my $tar_handler = new Archive::Tar;
-
   # Open the full Android backup and remove the header
   print_log_line_if($log_file_handle, "Opening Android backup and saving a copy, this may take a few seconds\n", $verbose);
   open(ANDROIDBACKUP, "<$android_backup");
-  undef $/;
-  seek(ANDROIDBACKUP, 24, 0);
-  my $entire_tar = <ANDROIDBACKUP>; # Get everything that's after the header
-  close(ANDROIDBACKUP);
 
-  # Decrompress the android backup's ZLIB and save it to disk (Archive::Tar won't work from memory)
-  anyuncompress(\$entire_tar, $tmp_android_tar_file);
-  print_log_line_if($log_file_handle, "Saving the TAR portion of the backup to: ".File::Spec->abs2rel($tmp_android_tar_file)."\n", $verbose);
+  # Check to make sure this is an Android backup
+  my $tmp_file_header;
+  read ANDROIDBACKUP, $tmp_file_header, 14;
+  if($tmp_file_header =~ /^ANDROID BACKUP/) {
+    undef $/;
+    seek(ANDROIDBACKUP, 24, 0);
+    my $entire_tar = <ANDROIDBACKUP>; # Get everything that's after the header
+    close(ANDROIDBACKUP);
 
-  # Open the TAR archive
-  $tar_handler->read($tmp_android_tar_file);
-  print_log_line($log_file_handle, "Opening TAR portion of archive\n");
+    # Decrompress the android backup's ZLIB and save it to disk (Archive::Tar won't work from memory)
+    anyuncompress(\$entire_tar, $tmp_android_tar_file);
+    print_log_line_if($log_file_handle, "Saving the TAR portion of the backup to: ".File::Spec->abs2rel($tmp_android_tar_file)."\n", $verbose);
+    undef $entire_tar;
 
-  # Loop over all the files contained therein
-  my $tmp_tar_files_extracted = 0;
-  my @tmp_tar_files = $tar_handler->list_files();
-  foreach $tmp_tar_file (@tmp_tar_files) {
-    my $tmp_tar_content = $tar_handler->get_content($tmp_tar_file);
-
-    # Check for SQLite files and save them to the export directory
-    if($tmp_tar_content =~ /^SQLite format 3/) {
-      my $tmp_sqlite_file = File::Spec->catfile($tmp_export_dir, $tmp_tar_file);
-      $tar_handler->extract_file($tmp_tar_file, $tmp_sqlite_file);
-      print_log_line_if($log_file_handle, "Found embedded SQLite file in TAR: $tmp_tar_file\n", $very_verbose);
-      $tmp_tar_files_extracted += 1;
-    }
-  }
-
-  # Walk through exported files and mine them all
-  my @files_to_mine;
-  find(
-    sub {
-      if(! -d $_ && file_is_sqlite($_)) {
-        my $tmp_filepath = $File::Find::name;
-        print_log_line_if($log_file_handle, "Found SQLite: $tmp_filepath\n", $verbose);
-        push(@files_to_mine, $tmp_filepath);
+    # Open the TAR archive
+    print_log_line($log_file_handle, "Opening TAR portion of archive\n");
+    my $tmp_tar_files_extracted = 0;
+    my $tar_iterator = Archive::Tar->iter($tmp_android_tar_file);
+    while(my $tmp_tar_file = $tar_iterator->()) {
+      my $tmp_tar_content = $tmp_tar_file->get_content();
+      if($tmp_tar_content =~ /^SQLite format 3/) {
+        my $tmp_sqlite_file = File::Spec->catfile($tmp_export_dir, $tmp_tar_file->name());
+        $tmp_tar_file->extract($tmp_sqlite_file);
+        print_log_line_if($log_file_handle, "Found embedded SQLite file in TAR: ".$tmp_tar_file->name()."\n", $very_verbose);
+        $tmp_tar_files_extracted += 1;
       }
-    },
-    $tmp_export_dir
-  );
-  print_log_line_if($log_file_handle, "\n", $verbose);
-  foreach $tmp_file (sort(@files_to_mine)){
-    
-    # Remember how many blobs we're currently at
-    my $current_blob_count = $total_identified_blobs;
-
-    # Run the parsing and store the export folder
-    my $tmp_run_folder = mine_file($output_directory, $tmp_file, $results_file, 1, $log_file_handle);
-
-    # Remove the copied files if we didn't actually do any work with them
-    if($total_identified_blobs == $current_blob_count) {
-      File::Path->remove_tree(File::Spec->abs2rel($tmp_run_folder));
     }
-  }
 
-  # Tell the user what we've done here
-  my $tmp_tar_status_line = "Found $tmp_tar_files_extracted SQLite database";
-  if($tmp_tar_files_extracted > 1) {
-    $tmp_tar_status_line .= "s";
+    # Walk through exported files and mine them all
+    my @files_to_mine;
+    find(
+      sub {
+        if(! -d $_ && file_is_sqlite($_)) {
+          my $tmp_filepath = $File::Find::name;
+          print_log_line_if($log_file_handle, "Found SQLite: $tmp_filepath\n", $verbose);
+          push(@files_to_mine, $tmp_filepath);
+        }
+      },
+      $tmp_export_dir
+    );
+    print_log_line_if($log_file_handle, "\n", $verbose);
+    foreach $tmp_file (sort(@files_to_mine)){
+      
+      # Remember how many blobs we're currently at
+      my $current_blob_count = $total_identified_blobs;
+
+      # Run the parsing and store the export folder
+      my $tmp_run_folder = mine_file($output_directory, $tmp_file, $results_file, 1, $log_file_handle);
+
+      # Remove the copied files if we didn't actually do any work with them
+      if($total_identified_blobs == $current_blob_count) {
+        File::Path->remove_tree(File::Spec->abs2rel($tmp_run_folder));
+      }
+    }
+
+    # Tell the user what we've done here
+    my $tmp_tar_status_line = "Found $tmp_tar_files_extracted SQLite database";
+    if($tmp_tar_files_extracted > 1) {
+      $tmp_tar_status_line .= "s";
+    }
+    $tmp_tar_status_line .= " in the Android backup, mining them all.\n";
+    print_log_line_if($log_file_handle, $tmp_tar_status_line, $tmp_tar_files_extracted);
+    print_log_line_if($log_file_handle, "Found no SQLite databases in Android backup.\n", !$tmp_tar_files_extracted);
+    
+  } else {
+    close(ANDROIDBACKUP);
+    print_log_line($log_file_handle, "$android_backup does not appear to be an Android backup, quitting\n");
   }
-  $tmp_tar_status_line .= " in the Android backup, mining them all.\n";
-  print_log_line_if($log_file_handle, $tmp_tar_status_line, $tmp_tar_files_extracted);
-  print_log_line_if($log_file_handle, "Found no SQLite databases in Android backup.\n", !$tmp_tar_files_extracted);
 
   # Clean up our temporary directory
   File::Path->remove_tree($tmp_export_dir);
@@ -812,6 +826,7 @@ sub print_usage {
   print "\t--dir=<path>: Identifies a directory to recursively search to find SQLite files to work on.\n";
   print "\t--android-backup=<path>: Identifies an Android backup to open and search for SQLite files to work on.\n";
   print "\t\tNote: This will unpack the Android backup on disk for TAR, so please ensure you have available space.\n";
+  print "\t\tNote: This also can be memory intensive while decompressing. If it errors out due to low memory, extract the backup yourself and use the --dir= option.\n";
   print "\nOptional Options:\n";
   print "\t--decompress: If set, will decompress recognized and supported compressed blobs, replacing the original blob contents on the working copy\n";
   print "\t\tNote: Decompress gets very slow in a database with large compressed objects. Expect this to take a few seconds to run.\n";
