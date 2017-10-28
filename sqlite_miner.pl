@@ -40,7 +40,6 @@ my $decompress = 0;
 my $export_files = 0;
 my $log_file_handle = 0;
 
-
 # Set up variables for what we mine
 my $total_identified_blobs = 0;
 my %mined_blobs;
