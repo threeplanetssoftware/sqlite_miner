@@ -429,7 +429,7 @@ sub check_column_for_fun {
   $base_query .= "$column_name FROM $table_name ";
 
   # Use the base query to loop over all the things we're looking for
-  foreach $file_type (sort(keys(%fun_stuff))) {
+  foreach $file_type (keys(%fun_stuff)) {
     my $tmp_query = $base_query . "WHERE hex($column_name) LIKE '".$fun_stuff{$file_type}{'regex'}."'";
 
     # Build and execute query
@@ -718,7 +718,7 @@ sub extract_sqlite_from_android_backup {
 
   # Clean up from any previous runs that error'd out
   if(-e $tmp_export_dir) {
-    print_log_line_if($log_file_handle, "Deleting existing export directory left over from previous run\n", $very_verbose;
+    print_log_line_if($log_file_handle, "Deleting existing export directory left over from previous run\n", $very_verbose);
     File::Path->remove_tree($tmp_export_dir);
   }
 
