@@ -26,7 +26,7 @@ use IO::Uncompress::AnyUncompress qw(anyuncompress $AnyUncompressError);
 use POSIX qw(strftime);
 use Time::HiRes qw(time);
 
-my $version = "1.2.0";
+my $version = "1.2.1";
 
 # Set up initial variables
 my $start_time = time;
