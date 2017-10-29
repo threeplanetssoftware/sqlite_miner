@@ -5,7 +5,7 @@ By: Jon Baumann, [Ciofeca Forensics](https://www.ciofecaforensics.com)
 This script mines SQLite databases for hidden gems that might be overlooked. It identifies for the forensic examiner which databases, tables, and columns had which potential types of files within them. For an explanation of why I wrote this script, please see [this blog entry](https://www.ciofecaforensics.com/2017/10/23/mining-hidden-gems-with-sqlite-miner/).
 
 ## How It Works
-This script searches identified SQLite databases to find files that are hidden in blob objects within the database. The `fun_stuff.pl` file controls the regular expressions that will be matched to assert that a given blob is a given file type. Currently it only supports file types whose magic number starts at offset 0.
+This script searches identified SQLite databases to find files that are hidden in blob objects within the database. The `fun_stuff.pl` file controls the regular expressions that will be matched to assert that a given blob is a given file type. SQLite Miner supports magic numbers at any offset.
 
 ## Usage
 ### Individual Files

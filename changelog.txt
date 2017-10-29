@@ -1,3 +1,9 @@
+Version 1.2.2 (October 28 2017)
+-------------
+New Features
+ - Added TAR to the file types
+ - Added the ability to search for magic numbers at offsets greater than 0 (such as TAR at 257)
+
 Version 1.2.1 (October 28 2017)
 -------------
 Bug Fixes
