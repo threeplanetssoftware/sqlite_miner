@@ -68,7 +68,8 @@ $verbose = $verbose || $very_verbose;
 print_copyright(STDOUT);
 
 # Set other files to read in
-my $fun_stuff_file = "fun_stuff.pl";
+my ($current_filename, $current_filedir, $current_suffix) = File::Basename::fileparse(__FILE__);
+my $fun_stuff_file = $current_filedir . "fun_stuff.pl";
 
 # Import our hash of Fun Stuff to look for
 require $fun_stuff_file;
