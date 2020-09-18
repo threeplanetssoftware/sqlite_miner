@@ -596,7 +596,7 @@ sub check_column_for_fun {
       close(TMP_OUTPUT);
 
       # Check if protoc will read this
-      my $result = `protoc --decode_raw < tmp_output.txt`;
+      my $result = `protoc --decode_raw < tmp_output.txt 2>&1`;
       # Remove the file to be cleaner
       unlink "tmp_output.txt";
 
