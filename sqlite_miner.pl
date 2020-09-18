@@ -26,7 +26,7 @@ use IO::Uncompress::AnyUncompress qw(anyuncompress $AnyUncompressError);
 use POSIX qw(strftime);
 use Time::HiRes qw(time);
 
-my $version = "1.2.2";
+my $version = "1.2.3";
 
 # Set up initial variables
 my $start_time = time;
@@ -60,6 +60,7 @@ GetOptions('file=s'           => \$original_file,
            'verbose'          => \$verbose,
            'very-verbose'     => \$very_verbose,
            'output=s'         => \$output_directory,
+           'protobufs'        => \$protobufs,
            'help'             => \$help);
 
 # Set verbose if very-verbose was chosen
@@ -563,6 +564,100 @@ sub check_column_for_fun {
       print RESULT_OUTPUT "\n";
     }
     
+  }
+
+  # If we want to do it the hard way...
+  if($protobufs) {
+
+    # Let's test them all for protobufs and hope it don't die
+    my $tmp_query = $base_query . "WHERE $column_name NOT NULL";
+
+    # Build and execute query
+    my $tmp_query_handler = $local_dbh->prepare($tmp_query);
+    $tmp_query_handler->execute();
+
+    # Loop over all rows returned
+    while(my @tmp_row = $tmp_query_handler->fetchrow_array()) {
+      my $tmp_primary_key;
+      my $tmp_data_blob;
+      my $file_type = "protobuf";
+
+      # Rip out the data
+      if($primary_key_column) {
+        $tmp_primary_key = $tmp_row[0];
+        $tmp_data_blob = $tmp_row[1];
+      } else {
+        $tmp_data_blob = $tmp_row[0];
+      }
+
+      # Create a file to hold the results of this
+      open(TMP_OUTPUT, ">tmp_output.txt");
+      print TMP_OUTPUT  "$tmp_data_blob";
+      close(TMP_OUTPUT);
+
+      # Check if protoc will read this
+      my $result = `protoc --decode_raw < tmp_output.txt`;
+      # Remove the file to be cleaner
+      unlink "tmp_output.txt";
+
+      # If it starts with a number, it was able to parse it.
+      if($result =~ /^\d+/) {
+        print_log_line_if($log_file_handle, "\tProtobuf: Possibly found in $column_name ", $verbose);
+        $total_identified_blobs += 1;
+        count_mined_blob(File::Spec->abs2rel($file_name), $tmp_table_name, $column_name, $file_type);
+
+        if($primary_key_column) {
+          print_log_line_if($log_file_handle, "when $primary_key_column=$tmp_primary_key\n", $verbose);
+        } else {
+          print_log_line_if($log_file_handle, "(no primary key)\n", $verbose);
+        }
+
+        # Print out to the target CSV file
+        (my $tmp_volume_for_output, my $tmp_directory_for_output, my $tmp_filename_for_output) = File::Spec->splitpath($file_name);
+        print RESULT_OUTPUT "\"".File::Spec->abs2rel($tmp_directory_for_output)."\",".
+                            "\"$tmp_filename_for_output\",".
+                            "\"$tmp_table_name\",".
+                            "\"$column_name\",".
+                            "\"$primary_key_column\",".
+                            "\"$tmp_primary_key\",".
+                            "\"$file_type\"";
+
+        # Save out the blob if we're exporting files
+        if($export_files) {
+
+          # Build the export filename (TABLE_COLUMN_[PRIMARYKEYCOLUMN_PRIMARYKEY].blob.EXTENSION)
+          my $tmp_export_file_name = $tmp_table_name."-".$column_name;
+          if($tmp_primary_key) {
+            $tmp_export_file_name .= "-".$primary_key_column."-".$tmp_primary_key;
+          }
+          $tmp_export_file_name .= ".blob.protobuf";
+          my $tmp_export_file_path = File::Spec->catfile($export_directory, $tmp_export_file_name);
+          my $tmp_export_file_counter = 1;
+          
+          # Keep looping until we're sure we have a unique file path
+          while(-e $tmp_export_file_path) {
+            $tmp_export_file_counter += 1;
+            $tmp_export_file_path = File::Spec->catfile($export_directory, $tmp_export_file_name."_".$tmp_export_file_counter);
+          }
+
+          # Export the file        
+          (my $tmp_export_volume_for_output, my $tmp_export_directory_for_output, my $tmp_export_filename_for_output) = File::Spec->splitpath($tmp_export_file_path);
+          print_log_line_if($log_file_handle, "\tExporting file as $tmp_export_filename_for_output\n", $very_verbose);
+
+          # Save off the file
+          open(EXPORT_OUTPUT, ">$tmp_export_file_path");
+          binmode(EXPORT_OUTPUT);
+          print EXPORT_OUTPUT $tmp_data_blob;
+          close(EXPORT_OUTPUT);
+
+          # Record where we stored this
+          print RESULT_OUTPUT ",\"$tmp_export_filename_for_output\"";
+        }
+
+        # Close the line in the output file
+        print RESULT_OUTPUT "\n";
+      }
+    }
   }
 }
 

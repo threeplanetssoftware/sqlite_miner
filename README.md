@@ -45,3 +45,9 @@ This script requires the following Perl packages:
 5. IO::Uncompress
 6. POSIX
 7. Time::HiRes
+
+
+## Protobufs
+If you want to run this to find protobufs, check out the `protobuf` branch. This is very experimental code and will not be optimized for large databases as it just tries to brute force the answer. It requires you to have the `protoc` [package](https://github.com/protocolbuffers/protobuf) installed and uses unix-specific commands, so Windows may be an issue. 
+
+To turn this functionality on, use the `--protobufs` switch on the command line. 
