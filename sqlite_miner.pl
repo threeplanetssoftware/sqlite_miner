@@ -26,7 +26,7 @@ use IO::Uncompress::AnyUncompress qw(anyuncompress $AnyUncompressError);
 use POSIX qw(strftime);
 use Time::HiRes qw(time);
 
-my $version = "1.2.3";
+my $version = "1.2.4";
 
 # Set up initial variables
 my $start_time = time;
@@ -592,6 +592,7 @@ sub check_column_for_fun {
 
       # Create a file to hold the results of this
       open(TMP_OUTPUT, ">tmp_output.txt");
+      binmode TMP_OUTPUT;
       print TMP_OUTPUT  "$tmp_data_blob";
       close(TMP_OUTPUT);
 

@@ -1,3 +1,8 @@
+Version 1.2.4 (September 19 2020)
+------------
+Bug Fixes
+ - Changed temporary file handle for protoc check to use binmode.
+
 Version 1.2.3 (September 17 2020)
 ------------
 New Features
