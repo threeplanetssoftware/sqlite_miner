@@ -19,6 +19,9 @@ The script can also be used to open an Adnroid backup without unpacking it first
 
 In addition, while this script attempts to cut down on memory usage, for large files tar may run out of memory and crash. If that occurs, decompress the file separately, then run this script with the `--dir` option on the exported data. Finally, decompressing the Android backup and working through the TAR will add time on to the script's processing. For example, a 1GB backup.ab file took roughly an additional 45 seconds to run against the Android backup, as compared to the exported files on a not-very-powerful computer. That said, decompressing the files takes roughly as long.
 
+### Protobufs
+If you want to try to find protobufs, use the `--protobufs` switch on the command line. This is somewhat experimental code and is not optimal for large databases as it literally tries to parse every blob as a protobuf and records when a blob correctly parses. It requires you to have the `protoc` [package](https://github.com/protocolbuffers/protobuf) installed. This may have false positives for binary data which appears to start like a protobuf. 
+
 ### Options
 The required options that are currently supported are (one of):
 1. `--file=`: This option tells the script where to find the SQLite you want to mine. 
@@ -32,6 +35,7 @@ The optional arguments are:
 4. `--output=`: This option sets the output directory to not be the default `output/`.
 5. `--verbose`: This option provides more feedback about the script as it runs.
 6. `--very-verbose`: As above, but more so.
+7. `--protobufs`: This option turns on a brute force check of every blob to see if it parses as a protobuf. This may have false positives. 
 
 ## Requirements
 This script requires the following Perl packages:
@@ -46,8 +50,3 @@ This script requires the following Perl packages:
 6. POSIX
 7. Time::HiRes
 
-
-## Protobufs
-If you want to run this to find protobufs, check out the `protobuf` branch. This is very experimental code and will not be optimized for large databases as it just tries to brute force the answer. It requires you to have the `protoc` [package](https://github.com/protocolbuffers/protobuf) installed and uses unix-specific commands, so Windows may be an issue. 
-
-To turn this functionality on, use the `--protobufs` switch on the command line. 
