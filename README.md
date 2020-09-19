@@ -22,6 +22,8 @@ In addition, while this script attempts to cut down on memory usage, for large f
 ### Protobufs
 If you want to try to find protobufs, use the `--protobufs` switch on the command line. This is somewhat experimental code and is not optimal for large databases as it literally tries to parse every blob as a protobuf and records when a blob correctly parses. It requires you to have the `protoc` [package](https://github.com/protocolbuffers/protobuf) installed. This may have false positives for binary data which appears to start like a protobuf. 
 
+If you are on Windows, the easiest way to install protoc is to download [this package](https://github.com/protocolbuffers/protobuf/releases/download/v3.13.0/protoc-3.13.0-win64.zip) and put the file `bin/protoc.exe` into `C:\Windows\system32`. 
+
 ### Options
 The required options that are currently supported are (one of):
 1. `--file=`: This option tells the script where to find the SQLite you want to mine. 
