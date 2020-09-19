@@ -22,7 +22,7 @@ In addition, while this script attempts to cut down on memory usage, for large f
 ### Protobufs
 If you want to try to find protobufs, use the `--protobufs` switch on the command line. This is somewhat experimental code and is not optimal for large databases as it literally tries to parse every blob as a protobuf and records when a blob correctly parses. It requires you to have the `protoc` [package](https://github.com/protocolbuffers/protobuf) installed. This may have false positives for binary data which appears to start like a protobuf. 
 
-If you are on Windows, the easiest way to install protoc is to download [this package](https://github.com/protocolbuffers/protobuf/releases/download/v3.13.0/protoc-3.13.0-win64.zip) and put the file `bin/protoc.exe` into `C:\Windows\system32`. 
+If you are on Windows, the easiest way to install protoc is to download [this package](https://github.com/protocolbuffers/protobuf/releases/download/v3.13.0/protoc-3.13.0-win64.zip) and put the file `bin/protoc.exe` into `C:\Windows\system32`. However, as a **warning**, in testing it seems that the same version of protoc on Windows finds significantly less protobufs in the same test file as on Linux and MacOS. You are advised to use a differnt operating system, if you can. Linux distributions can be found [for free](https://linuxmint.com/download.php) in LiveCD form which would not require you to make any permenant changes to your computer.
 
 ### Options
 The required options that are currently supported are (one of):
